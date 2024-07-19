@@ -1,0 +1,135 @@
+---
+title: "Différences des tables"
+author: "Sariaka Ramialison"
+date: "2024-07-04"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r, message=FALSE}
+library(readxl)
+library(purrr) # pour utiliser map
+library(tidyverse)
+```
+
+
+### I. Tables 
+
++ Lecture de la table de base `df_init` 
+
+La table que j'utilise est issue d'une requête json que Martin a faite. Elle a été exportée au format excel.
+```{r, cache=TRUE, warning=FALSE}
+path <- "/Users/sariakasalomon-ramialison/Desktop/Propage/all_data_propage20240201.xlsx"
+df_init <- read_excel(path)
+df_init
+```
+ 
+ 
++ Lecture de la table de Maël `df_propage` 
+
+
+```{r, cache=TRUE}
+path2 <- "/Users/sariakasalomon-ramialison/Desktop/Propage/Tuilage Propage/df_propage.csv"
+df_propage <- read.csv(path2, sep = ";")
+df_propage
+```
+ <br> 
+
+### II. Différences 
+ <br> 
+ 
+#### 1. Colonnes supplémentaires 
+
+
+```{r}
+colnames(df_propage)[!colnames(df_propage) %in% colnames(df_init)]
+```
+ <br>
+ 
+#### 2. Colonnes aux formats différents 
+
++ Un exemple sur `id_releve` 
+
+```{r}
+# un exemple
+df_propage$"id_releve"[1] ; df_init$"id_releve"[1]
+class(df_propage$"id_releve") ; class(df_init$"id_releve")
+```
+
++ Exemple Dates et heures 
+
+```{r}
+# un exemple
+df_propage$heure_fin[1] ; df_init$heure_fin[1]
+class(df_propage$heure_fin) ; class(df_init$heure_fin)
+```
+
++ Table de comparaison
+
+```{r}
+# listes des formats des colonnes pour chaque df
+col_df_propage <- sapply(df_propage, class)
+col_df_init <- sapply(df_init, class)
+
+# création de la liste des colonnes aux formats différents
+liste_formats_diff <- c()
+for (col in colnames(df_init)){
+  if (col_df_propage[col] != col_df_init[col]){
+    liste_formats_diff <- c(liste_formats_diff, col)
+  }
+}
+
+# Création de la table des colonnes aux formats 
+# colonne 1 : df_propage, colonne 2 : df_init
+cbind(col_df_propage[liste_formats_diff], col_df_init[liste_formats_diff])
+```
+
+**Commentaire** : Toutes les colonnes date.time sont différentes : "character" pour df_propage, "POSIXct" & "POSIXt" pour ma table 
+ 
+ <br> 
+
+
+#### 3. Comparaison id_releve 
+
+
++ Formatage préalable des `id` de `df_init` pour faciliter les comparaisons 
+
+
+Note pour Maël : j'avais initialement un espace insécable bizarre pour les milliers 
+
+```{r, cache=TRUE, warning=FALSE}
+# Formatage des `id`
+df_init$id_releve <- as.numeric(gsub(intToUtf8(8239),"", df_init$id_releve))
+df_init$structure_id <- as.numeric(gsub(intToUtf8(8239),"", df_init$structure_id))
+df_init$user_id <- as.numeric(intToUtf8(8239),"", df_init$user_id)
+df_init$site_id <- as.numeric(gsub(intToUtf8(8239),"", df_init$site_id))
+```
+
++ Recherche des relevés différents 
+
+```{r}
+#nombre de relevés pour chaque table
+length(unique(df_init$id_releve)) ; length(unique(df_propage$id_releve))
+```
+La table de Maël étant plus récente, c'est logique 
+
+```{r}
+# Vérification que tous les releves de df_init sont bien dans df_propage
+sum(!unique(df_init$id_releve) %in% unique(df_propage$id_releve))
+```
+Il manque 65 relevés... Il y a donc 15058 - 14702 + 65 = 421 nouveaux relevés dans df_propage.
+
+```{r, message=FALSE}
+# Vérification que les nouveaux relevés de df_propage sont bien récents
+liste_releves_recents <- unique(df_propage$id_releve)[!unique(df_propage$id_releve) %in% unique(df_init$id_releve)]
+df_propage |>
+  select(id_releve, releve_date) |>
+  filter(id_releve %in% liste_releves_recents) |>
+  group_by(id_releve, releve_date) |>
+  summarise(n = n()) |>
+  arrange(releve_date) 
+```
+**Commentaire** : OK, il s'agit bien de nouveaux relevés qui n'ont certainement pas encore été enregistrés sur la plateforme lorsque Martin a extrait les données. Mais alors pourquoi il manque 65 relevés dans df_propage?
+
